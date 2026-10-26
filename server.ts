@@ -3,14 +3,15 @@ import express from "express";
 import { createServer } from "node:http";
 import next from "next";
 import { Server } from "socket.io";
-import { prisma } from "./src/lib/prisma";
+import { openDatabase, migrate, createMessage, listMessages } from "./src/lib/database";
 
 async function main() {
   const port = Number(process.env.PORT ?? 3000);
   const hostname = process.env.HOST ?? "0.0.0.0";
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid PORT");
   const app = next({ dev: process.env.NODE_ENV !== "production", hostname, port });
-  await prisma.$connect();
+  const db = openDatabase();
+  migrate(db);
   await app.prepare();
   const api = express();
   api.disable("x-powered-by");
@@ -19,7 +20,7 @@ async function main() {
 
   api.get("/api/health", async (_req, res) => {
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      db.prepare("SELECT 1").get();
       res.json({ status: "ok", database: "sqlite" });
     } catch {
       res.status(503).json({ status: "unavailable" });
@@ -27,8 +28,8 @@ async function main() {
   });
   api.get("/api/messages", async (_req, res) => {
     try {
-      const messages = await prisma.message.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
-      res.json(messages.reverse());
+      const messages = listMessages(db);
+      res.json(messages);
     } catch {
       res.status(503).json({ error: "Unable to load messages" });
     }
@@ -41,7 +42,7 @@ async function main() {
         return;
       }
       try {
-        const message = await prisma.message.create({ data: { text: text.trim() } });
+        const message = createMessage(db, text.trim());
         io.emit("message:created", message);
         ack({ ok: true });
       } catch {
@@ -59,7 +60,8 @@ async function main() {
     const timeout = setTimeout(() => process.exit(1), 10000);
     timeout.unref();
     io.close(() => {
-      void Promise.all([prisma.$disconnect(), app.close()]).then(() => process.exit(0));
+      db.close();
+      void app.close().then(() => process.exit(0));
     });
   };
   process.on("SIGTERM", shutdown);

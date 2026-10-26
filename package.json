@@ -11,14 +11,13 @@
     "start": "NODE_ENV=production node dist/server.js",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "lint": "eslint .",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
-    "setup": "node scripts/setup.mjs && npm run db:generate && npm run db:migrate",
-    "test:smoke": "tsx scripts/smoke.ts"
+    "db:migrate": "tsx scripts/migrate.ts",
+    "setup": "node scripts/setup.mjs && npm run db:migrate",
+    "test:smoke": "tsx scripts/smoke.ts",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "@prisma/adapter-better-sqlite3": "^7.10.1",
-    "@prisma/client": "^7.10.1",
+    "better-sqlite3": "^13.0.3",
     "dotenv": "^17.2.0",
     "express": "^5.1.0",
     "next": "16.4.3",
@@ -28,13 +27,13 @@
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "eslint": "^9.39.0",
     "eslint-config-next": "16.4.3",
-    "prisma": "^7.10.1",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
   }

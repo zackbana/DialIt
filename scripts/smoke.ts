@@ -2,7 +2,8 @@ import "dotenv/config";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { io } from "socket.io-client";
-import { prisma } from "../src/lib/prisma";
+import { openDatabase } from "../src/lib/database";
+const db = openDatabase();
 const url = process.env.SMOKE_URL ?? "http://127.0.0.1:3000";
 const sender = io(url, { transports: ["websocket"], autoConnect: false, reconnection: false });
 const receiver = io(url, { transports: ["websocket"], autoConnect: false, reconnection: false });
@@ -39,13 +40,13 @@ try {
   assert.equal(history.status, 200);
   const messages = await history.json() as { text: string }[];
   assert.ok(messages.some((message) => message.text === text));
-  assert.equal(await prisma.message.count({ where: { text } }), 1);
+  assert.equal((db.prepare("SELECT count(*) AS count FROM Message WHERE text = ?").get(text) as { count: number }).count, 1);
   console.log("PASS: page, database health, WebSocket-only connection, validation, two-client broadcast, HTTP history, SQLite persistence");
 } finally {
   sender.disconnect();
   receiver.disconnect();
-  await prisma.message.deleteMany({ where: { text } });
-  await prisma.$disconnect();
+  db.prepare("DELETE FROM Message WHERE text = ?").run(text);
+  db.close();
 }
 
 }
