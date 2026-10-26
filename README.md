@@ -55,6 +55,24 @@ npm start
 
 Stop the development server first so only one server uses the database/port. **Use `npm start`, not `next start`**: the custom server owns Next.js, Express and persistent WebSockets on one port. Keep the terminal open and prevent the Mac itself from sleeping. On other systems, better-sqlite3 also requires a C++ compiler, make, Python 3 and matching Node headers for its native addon. Initial npm/Node-header downloads need internet access; recordings do not.
 
+## Troubleshooting Mac installation
+
+If a native build reports `node-gyp@7`, `Completion callback never invoked`, or a path such as `~/node_modules/.bin/node-gyp`, an older ancestor installation is being picked up. DialIt pins a project-local `node-gyp` 12.2.0 for Node 24/Python 3.12 compatibility. Pull the current code and install with development dependencies included (the default).
+
+If the log also reports `EACCES` for `~/Library/Caches/node-gyp`, use project-local caches instead of changing ownership of your home directory. Stop any running DialIt/npm processes first, then, from the repository root:
+
+```sh
+git pull --ff-only origin main
+# Removes only reinstallable dependencies; does not touch data/ or .env.
+rm -rf ./node_modules
+npm_package_config_node_gyp_devdir="$PWD/.cache/node-gyp" npm ci --include=dev --cache "$PWD/.cache/npm"
+npm run setup
+```
+
+The `npm_package_config_node_gyp_devdir` setting is supported by the pinned node-gyp and bypasses the inaccessible system/user header cache. Both caches are ignored by Git. Do not use `sudo npm ci`.
+
+An unrelated npm warning `Unknown user config "prefix/usr/local"` indicates a malformed key in your user npm configuration. Remove just that key with `npm config delete 'prefix/usr/local' --location=user`; do not publish your `.npmrc`, which may contain credentials. The ESLint deprecation warning does not cause this native build failure.
+
 ## Join from a tablet on the same Wi-Fi
 
 1. Connect the Mac, shared display and tablets to the same trusted network. Avoid guest Wi-Fi/client-isolation networks. Prefer an Ethernet connection for the server and central display where possible.
