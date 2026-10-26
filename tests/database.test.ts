@@ -3,25 +3,21 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openDatabase, migrate, createMessage, listMessages } from "../src/lib/database";
+import { openDatabase, migrate } from "../src/lib/database";
 
-test("migrations preserve data on repeat and messages survive reopening", () => {
+test("product migrations preserve project identities and data on repeat and reopening", () => {
   const directory = mkdtempSync(join(tmpdir(), "dialit-db-"));
   const filename = join(directory, "test.db");
   let db = openDatabase(filename);
   try {
     migrate(db);
-    const message = createMessage(db, "A quote: ' and Unicode: 你好");
-    migrate(db);
-    db.close();
-    db = openDatabase(filename);
-    migrate(db);
-    assert.deepEqual(listMessages(db), [message]);
-    for (let i = 0; i < 55; i++) createMessage(db, `message-${i}`);
-    const history = listMessages(db);
-    assert.equal(history.length, 50);
-    assert.equal(history.at(-1)?.text, "message-54");
-    assert.ok(!history.some((item) => item.id === message.id));
+    const project = { id: "project-test", ownerId: "owner-test", name: "A quote: ' and Unicode: 你好", createdAt: 1234 };
+    db.prepare("INSERT INTO Moderator VALUES ('owner-test','test-user','not-a-real-credential','admin',1234)").run();
+    db.prepare("INSERT INTO Project VALUES (@id,@ownerId,@name,@createdAt)").run(project);
+    migrate(db); db.close(); db = openDatabase(filename); migrate(db);
+    assert.deepEqual(db.prepare("SELECT * FROM Project").get(), project);
+    assert.equal((db.prepare("SELECT count(*) n FROM RecordingRun").get() as { n: number }).n, 0);
+    assert.deepEqual(db.pragma("foreign_key_check"), []);
   } finally { db.close(); rmSync(directory, { recursive: true, force: true }); }
 });
 

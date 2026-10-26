@@ -1,0 +1,2 @@
+ALTER TABLE Rating ADD COLUMN reconciledVideoMs REAL;
+ALTER TABLE Reaction ADD COLUMN capture TEXT NOT NULL DEFAULT '{}';

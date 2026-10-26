@@ -7,3 +7,10 @@ dist/
 *.db-*
 *.tsbuildinfo
 .cache/
+
+data/
+backups/
+playwright-report/
+test-results/
+certs/
+Caddyfile
