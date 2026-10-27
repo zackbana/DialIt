@@ -46,6 +46,12 @@ test("actual backend: upload, 20 identities, both modes, secure scopes, timing, 
     const strangerLogin = await request("/api/auth/login", "POST", { username: "other-owner", password: "other-test-password-123" });
     const strangerCookie = strangerLogin.headers.get("set-cookie")!.split(";")[0];
     assert.equal((await request(`/api/sessions/${sid}/manage`, "GET", undefined, strangerCookie)).status, 403);
+    assert.equal((await request(`/api/projects/${project.id}`, "PATCH", { name: "Forbidden" }, strangerCookie)).status, 403);
+    assert.equal((await request(`/api/projects/${project.id}`, "DELETE", { confirmName: "Forbidden" }, strangerCookie)).status, 403);
+    assert.equal((await request(`/api/projects/${project.id}`, "PATCH", { name: " " }, cookie)).status, 400);
+    await json(`/api/projects/${project.id}`, "PATCH", { name: "Renamed campaign" }, cookie);
+    assert.equal((db.prepare("SELECT name FROM Project WHERE id=?").get(project.id) as { name: string }).name, "Renamed campaign");
+    assert.equal((await request(`/api/projects/${project.id}`, "DELETE", { confirmName: "wrong" }, cookie)).status, 400);
     const moderator = await connect(sid, "moderator", "", cookie);
     heartbeat = setInterval(() => moderator.emit("heartbeat"), 500);
     const video = join(directory, "fixture.mp4");
@@ -75,6 +81,7 @@ test("actual backend: upload, 20 identities, both modes, secure scopes, timing, 
       const result = await socket.timeout(3000).emitWithAck("playback", report); assert.equal(result.ok, true, JSON.stringify(result));
     };
     const first = await createRun();
+    assert.equal((await request(`/api/projects/${project.id}`, "DELETE", { confirmName: "Renamed campaign" }, cookie)).status, 409);
     for (const client of clients) await playback(client);
     await playback(display);
     assert.equal(current().run!.state, "ready");
@@ -149,6 +156,15 @@ test("actual backend: upload, 20 identities, both modes, secure scopes, timing, 
     await assert.rejects(() => connect(sid, "participant", people[0].token), /access denied/i);
     const recoveredDevice = await connect(sid, "participant", recoveredCredential.token);
     assert.equal((await recoveredDevice.timeout(3000).emitWithAck("samples", { ratings: [localSample], reactions: [] })).ok, true);
+    const disposable = await json<{ id: string }>("/api/projects", "POST", { name: "Disposable campaign" }, cookie);
+    const disposableSession = await json<{ id: string; code: string }>("/api/sessions", "POST", { projectId: disposable.id, name: "Disposable session" }, cookie);
+    const disposableModerator = await connect(disposableSession.id, "moderator", "", cookie);
+    await json("/api/join", "POST", { code: disposableSession.code });
+    await json(`/api/projects/${disposable.id}`, "DELETE", { confirmName: "Disposable campaign" }, cookie);
+    await sleep(50); assert.equal(disposableModerator.connected, false);
+    assert.equal(db.prepare("SELECT id FROM Project WHERE id=?").get(disposable.id), undefined);
+    assert.equal(db.prepare("SELECT id FROM Session WHERE id=?").get(disposableSession.id), undefined);
+    assert.equal((db.prepare("PRAGMA foreign_key_check").all()).length, 0);
     const interruptionRun = await createRun();
     const backupDir = join(directory, "backup"); await backup(db, media, backupDir); await validateBackup(backupDir);
     const restoredDb = join(directory, "restored", "db.sqlite"), restoredMedia = join(directory, "restored", "media");
@@ -167,6 +183,17 @@ test("actual backend: upload, 20 identities, both modes, secure scopes, timing, 
     backend = createBackend(db, media);
     const recovered = backend.snapshot({ role: "moderator", sessionId: sid });
     assert.equal(recovered.run!.state, "interrupted"); assert.equal((db.prepare("SELECT count(*) n FROM Rating").get() as { n: number }).n, 22);
+    backend.api.use(backend.errors);
+    await new Promise<void>((resolve) => backend.http.listen(0, "127.0.0.1", resolve));
+    const deleteAddress = backend.http.address(); assert.ok(deleteAddress && typeof deleteAddress !== "string");
+    const deleted = await fetch(`http://127.0.0.1:${deleteAddress.port}/api/projects/${project.id}`, { method: "DELETE", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ confirmName: "Renamed campaign" }) });
+    assert.equal(deleted.status, 200, await deleted.text());
+    for (const table of ["Project", "Clip", "Session"]) assert.equal(db.prepare(`SELECT id FROM ${table} WHERE ${table === "Project" ? "id" : "projectId"}=?`).get(project.id), undefined);
+    assert.equal(db.prepare("SELECT runId FROM Rating WHERE projectId=?").get(project.id), undefined);
+    assert.equal(db.prepare("SELECT id FROM RecordingRun WHERE sessionId=?").get(sid), undefined);
+    assert.equal(db.prepare("SELECT id FROM Participant WHERE sessionId=?").get(sid), undefined);
+    assert.equal(db.prepare("PRAGMA foreign_key_check").all().length, 0);
+
   } finally {
     if (heartbeat) clearInterval(heartbeat);
     sockets.forEach((socket) => socket.disconnect());

@@ -233,6 +233,37 @@ export function createBackend(db: Database.Database, mediaDirectory: string) {
     const person = requireModerator(req), name = nameSchema.parse(req.body.name), id = randomUUID();
     put("INSERT INTO Project VALUES (?,?,?,?)", id, person.id, name, now()); res.status(201).json({ id, name });
   });
+  api.patch("/api/projects/:pid", (req, res) => {
+    const id = idSchema.parse(req.params.pid); checkProject(requireModerator(req), id);
+    const name = nameSchema.parse(req.body.name);
+    put("UPDATE Project SET name=? WHERE id=?", name, id); res.json({ id, name });
+  });
+  api.delete("/api/projects/:pid", (req, res) => {
+    const id = idSchema.parse(req.params.pid); checkProject(requireModerator(req), id);
+    const project = get<{ name: string }>("SELECT name FROM Project WHERE id=?", id)!;
+    requireThat(req.body?.confirmName === project.name, "Enter the project name to confirm deletion");
+    const sessions = all<SessionRow>("SELECT * FROM Session WHERE projectId=?", id);
+    requireThat(!get("SELECT r.id FROM RecordingRun r JOIN Session s ON s.id=r.sessionId WHERE s.projectId=? AND r.state NOT IN ('completed','interrupted')", id), "End all active viewings before deleting this project", 409);
+    const clips = all<ClipRow>("SELECT * FROM Clip WHERE projectId=?", id);
+    const participantIds = sessions.flatMap((session) => all<{ id: string }>("SELECT id FROM Participant WHERE sessionId=?", session.id).map((person) => person.id));
+    db.transaction(() => {
+      const runs = "SELECT r.id FROM RecordingRun r JOIN Session s ON s.id=r.sessionId WHERE s.projectId=?";
+      for (const table of ["RunUpload", "Rating", "Reaction", "PlaybackEvent", "RunTransition", "RunParticipant"]) put(`DELETE FROM ${table} WHERE runId IN (${runs})`, id);
+      put("DELETE FROM Diagnostic WHERE sessionId IN (SELECT id FROM Session WHERE projectId=?)", id);
+      put("DELETE FROM RecordingRun WHERE sessionId IN (SELECT id FROM Session WHERE projectId=?)", id);
+      put("DELETE FROM Participant WHERE sessionId IN (SELECT id FROM Session WHERE projectId=?)", id);
+      put("DELETE FROM Session WHERE projectId=?", id); put("DELETE FROM Clip WHERE projectId=?", id); put("DELETE FROM Project WHERE id=?", id);
+    })();
+    const sessionIds = new Set(sessions.map((session) => session.id));
+    for (const [socketId, identity] of identities) if (sessionIds.has(identity.sessionId)) io.sockets.sockets.get(socketId)?.disconnect(true);
+    for (const session of sessions) for (const role of ["moderator", "display"]) live.delete(`${role}:${session.id}`);
+    for (const pid of participantIds) live.delete(pid);
+    for (const clip of clips) {
+      const filename = resolve(mediaDirectory, clip.filename);
+      if (filename.startsWith(resolve(mediaDirectory) + "/")) try { unlinkSync(filename); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") console.error("Could not remove deleted project media", error); }
+    }
+    res.json({ ok: true });
+  });
   api.post("/api/sessions", (req, res) => {
     const person = requireModerator(req);
     const body = z.object({ projectId: idSchema, name: nameSchema, config: configSchema.optional() }).parse(req.body);
@@ -559,7 +590,9 @@ export function createBackend(db: Database.Database, mediaDirectory: string) {
     }));
     socket.on("disconnect", () => {
       identities.delete(socket.id); status.sockets.delete(socket.id); status.connected = status.sockets.size > 0; status.ready = false;
-      const session = sessionFor(identity.sessionId), run = runFor(session);
+      const session = get<SessionRow>("SELECT * FROM Session WHERE id=?", identity.sessionId);
+      if (!session) return;
+      const run = runFor(session);
       const included = !identity.participantId || !run || !get<{ excluded: number }>("SELECT excluded FROM RunParticipant WHERE runId=? AND participantId=?", run.id, identity.participantId)?.excluded;
       if (!status.connected && included && (identity.role === "moderator" || identity.role === "display" || run?.config.mode === "individual")) safePause(identity.sessionId, `${identity.role} disconnected; explicit recovery required`);
       diagnostic(identity.sessionId, run?.id ?? null, "disconnect", { role: identity.role }, identity.participantId);

@@ -87,6 +87,7 @@ Plain LAN HTTP can be useful for an initial trusted-network pilot, but does **no
 
 Read the [moderator run-sheet](docs/moderator-run-sheet.md) before running a group.
 
+- Use **Edit project** on the project list to rename a campaign. **Delete project** requires typing its current name and permanently removes its sessions, participants, recordings, ratings and uploaded videos. Export or back up needed data and finish tablet uploads first; deletion is blocked until all viewings have ended.
 - Create a project, then a session. `/moderator/:sessionId` handles clips, configuration and run controls; `/display/:sessionId` is scoped presentation-only; `/dial/:sessionId` is the tablet view; `/dashboard/:sessionId` is authenticated reporting.
 - Upload a compatible clip, choose the mode, question, endpoint labels, optional reaction button and comma-separated group tags; **Save configuration** before preparing the next run. Mode/clip/question settings are frozen during the prepared/active viewing.
 - Join up to **20 identities** in a session, then prepare a viewing. Readiness is reset for the new run/clip. Shared tablets tap Ready; media devices also attempt playback and check real buffering. A failed readiness attempt remains visible and can be retried. Preparing devices that are still unready after 60 seconds produce a readiness-timeout warning.
