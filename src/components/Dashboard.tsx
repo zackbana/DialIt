@@ -39,8 +39,8 @@ export function Dashboard({ sessionId }: { sessionId: string }) {
     const bins = result?.bins ?? [];
     const datasets: ChartData<"line", { x: number; y: number | null }[]>["datasets"] = [
       { label: "−1 sample SD", data: bins.map((bin) => ({ x: bin.second, y: bin.sd === null ? null : Math.max(0, bin.mean! - bin.sd) })), borderColor: "transparent", pointRadius: 0, fill: false },
-      { label: "+1 sample SD band", data: bins.map((bin) => ({ x: bin.second, y: bin.sd === null ? null : Math.min(100, bin.mean! + bin.sd) })), borderColor: "transparent", backgroundColor: "rgba(22,107,86,.16)", pointRadius: 0, fill: "-1" },
-      { label: "Mean rating", data: bins.map((bin) => ({ x: bin.second, y: bin.mean })), borderColor: "#166b56", backgroundColor: "#166b56", borderWidth: 3, pointRadius: bins.length < 120 ? 2 : 0, spanGaps: false },
+      { label: "+1 sample SD band", data: bins.map((bin) => ({ x: bin.second, y: bin.sd === null ? null : Math.min(100, bin.mean! + bin.sd) })), borderColor: "transparent", backgroundColor: "rgba(0,127,120,.16)", pointRadius: 0, fill: "-1" },
+      { label: "Mean rating", data: bins.map((bin) => ({ x: bin.second, y: bin.mean })), borderColor: "#007f78", backgroundColor: "#007f78", borderWidth: 3, pointRadius: bins.length < 120 ? 2 : 0, spanGaps: false },
     ];
     if (traces) for (const [index, person] of (result?.participants ?? []).entries()) datasets.push({ label: person.label + (person.groupTag ? ` · ${person.groupTag}` : ""), data: bins.map((bin) => ({ x: bin.second, y: bin.values[person.id] ?? null })), borderColor: palette[index % palette.length], borderWidth: 1, pointRadius: 0, spanGaps: false });
     datasets.push({ label: "Reaction events", data: bins.map((bin) => ({ x: bin.second, y: bin.reactions || null })), borderColor: "#b7781d", backgroundColor: "#b7781d", yAxisID: "reactions", showLine: false, pointStyle: "triangle", pointRadius: 5 });
@@ -66,7 +66,7 @@ export function Dashboard({ sessionId }: { sessionId: string }) {
         const mean = result?.bins.find((bin) => bin.second === moment.second)?.mean;
         if (mean === null || mean === undefined) continue;
         const y = scales.y.getPixelForValue(mean);
-        ctx.fillStyle = moment.kind === "Peak" ? "#166b56" : moment.kind === "Trough" ? "#a44045" : "#a26d24";
+        ctx.fillStyle = moment.kind === "Peak" ? "#007f78" : moment.kind === "Trough" ? "#a44045" : "#a26d24";
         ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
         ctx.font = "11px Arial"; ctx.fillText(moment.kind.replace("Largest ", ""), Math.min(x + 7, chartArea.right - 110), Math.max(chartArea.top + 12, y - 10));
       }
